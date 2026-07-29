@@ -1,0 +1,23 @@
+{
+  "expo": {
+    "name": "AttendAI Student",
+    "slug": "attendai-student",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "com.attendai.student",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "ios": {
+      "bundleIdentifier": "com.attendai.student",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "AttendAI uses your location only while you check into an active class session."
+      }
+    },
+    "plugins": [
+      ["expo-location", {"locationWhenInUsePermission": "Allow AttendAI to verify your location during an active attendance check-in."}],
+      "expo-secure-store"
+    ]
+  }
+}
