@@ -733,11 +733,12 @@ function Courses({ user }) {
 
 function Sessions() {
   const [items, setItems] = useState([]);
-  const [courses, setCourses] =
-    useState([]);
-
+  const [courses, setCourses] = useState([]);
   const [show, setShow] = useState(false);
   const [error, setError] = useState("");
+  const [locating, setLocating] = useState(false);
+  const [locationAccuracy, setLocationAccuracy] =
+    useState(null);
 
   const [selectedSession, setSelectedSession] =
     useState(null);
@@ -780,26 +781,111 @@ function Sessions() {
     load();
   }, [load]);
 
+  function useCurrentLocation() {
+    setError("");
+    setLocationAccuracy(null);
+
+    if (!navigator.geolocation) {
+      setError(
+        "Location detection is not supported by this browser."
+      );
+      return;
+    }
+
+    setLocating(true);
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const latitude =
+          position.coords.latitude.toFixed(6);
+
+        const longitude =
+          position.coords.longitude.toFixed(6);
+
+        const accuracy = Math.round(
+          position.coords.accuracy
+        );
+
+        setForm((currentForm) => ({
+          ...currentForm,
+          latitude,
+          longitude,
+        }));
+
+        setLocationAccuracy(accuracy);
+        setLocating(false);
+      },
+
+      (locationError) => {
+        let message =
+          "Current location could not be detected.";
+
+        if (locationError.code === 1) {
+          message =
+            "Location permission was denied. Allow location access in the browser and try again.";
+        }
+
+        if (locationError.code === 2) {
+          message =
+            "Current location is unavailable. Turn on location services and try again.";
+        }
+
+        if (locationError.code === 3) {
+          message =
+            "Location detection took too long. Check the internet connection and try again.";
+        }
+
+        setError(message);
+        setLocating(false);
+      },
+
+      {
+        enableHighAccuracy: true,
+        timeout: 20000,
+        maximumAge: 0,
+      }
+    );
+  }
+
   async function save(event) {
     event.preventDefault();
     setError("");
 
+    if (
+      form.latitude === "" ||
+      form.longitude === ""
+    ) {
+      setError(
+        "Detect the class location before creating the session."
+      );
+      return;
+    }
+
     try {
       await api("/attendance/sessions/", {
         method: "POST",
+
         body: JSON.stringify({
           ...form,
+
           starts_at: new Date(
             form.starts_at
           ).toISOString(),
+
           ends_at: new Date(
             form.ends_at
           ).toISOString(),
+
           latitude: Number(form.latitude),
-          longitude: Number(form.longitude),
+
+          longitude: Number(
+            form.longitude
+          ),
+
           radius_metres: Number(
             form.radius_metres
           ),
+
           minimum_dwell_seconds: Number(
             form.minimum_dwell_seconds
           ),
@@ -808,6 +894,7 @@ function Sessions() {
 
       setShow(false);
       setForm(initialForm);
+      setLocationAccuracy(null);
       load();
     } catch (err) {
       setError(err.message);
@@ -830,6 +917,7 @@ function Sessions() {
         api(
           `/attendance/attendance/history/?session=${session.id}`
         ),
+
         api(
           `/attendance/enrollments/?course=${session.course}`
         ),
@@ -847,6 +935,7 @@ function Sessions() {
       const completeRegister =
         enrolments.map((enrolment) => ({
           enrolment,
+
           record:
             recordsByStudent.get(
               enrolment.student
@@ -897,7 +986,7 @@ function Sessions() {
       <PageHead
         eyebrow="Attendance windows"
         title="Class sessions"
-        text="Schedule attendance events and click a session to view its attendance register."
+        text="Detect the class location automatically, schedule attendance and view the session register."
         action={() => setShow(!show)}
         actionText="New session"
       />
@@ -921,6 +1010,7 @@ function Sessions() {
             options={courses.map(
               (course) => [
                 course.id,
+
                 `${course.code} — ${course.title}`,
               ]
             )}
@@ -961,29 +1051,114 @@ function Sessions() {
             }
           />
 
-          <Field
-            label="Latitude"
-            type="number"
-            value={form.latitude}
-            set={(value) =>
-              setForm({
-                ...form,
-                latitude: value,
-              })
-            }
-          />
+          <div
+            style={{
+              gridColumn: "1 / -1",
+              display: "flex",
+              alignItems: "center",
+              gap: "16px",
+              flexWrap: "wrap",
+              padding: "18px",
+              background: "#f0f6fc",
+              border: "1px solid #d9e6f2",
+              borderRadius: "12px",
+            }}
+          >
+            <button
+              type="button"
+              className="primary"
+              onClick={useCurrentLocation}
+              disabled={locating}
+            >
+              {locating ? (
+                <RefreshCw
+                  size={18}
+                  className="spin"
+                />
+              ) : (
+                <MapPin size={18} />
+              )}
 
-          <Field
-            label="Longitude"
-            type="number"
-            value={form.longitude}
-            set={(value) =>
-              setForm({
-                ...form,
-                longitude: value,
-              })
-            }
-          />
+              {locating
+                ? "Detecting location…"
+                : form.latitude
+                  ? "Detect location again"
+                  : "Use current location"}
+            </button>
+
+            <div>
+              <strong
+                style={{
+                  display: "block",
+                  color: "#123c69",
+                  fontSize: "13px",
+                }}
+              >
+                {form.latitude
+                  ? "Class location detected"
+                  : "Class location required"}
+              </strong>
+
+              <span
+                style={{
+                  color: "#6c7887",
+                  fontSize: "12px",
+                }}
+              >
+                The lecturer must be physically
+                present at the approved class
+                location.
+              </span>
+
+              {locationAccuracy !== null && (
+                <span
+                  style={{
+                    display: "block",
+                    color: "#1f7a5a",
+                    fontSize: "11px",
+                    marginTop: "4px",
+                  }}
+                >
+                  Estimated accuracy: approximately{" "}
+                  {locationAccuracy} metres
+                </span>
+              )}
+            </div>
+          </div>
+
+          <label>
+            Latitude
+
+            <input
+              required
+              readOnly
+              type="number"
+              step="any"
+              value={form.latitude}
+              placeholder="Automatically detected"
+              style={{
+                background: "#f5f7f9",
+                cursor: "not-allowed",
+              }}
+            />
+          </label>
+
+          <label>
+            Longitude
+
+            <input
+              required
+              readOnly
+              type="number"
+              step="any"
+              value={form.longitude}
+              placeholder="Automatically detected"
+              style={{
+                background: "#f5f7f9",
+                cursor: "not-allowed",
+              }}
+            />
+          </label>
 
           <Field
             label="Radius (metres)"
@@ -1006,13 +1181,22 @@ function Sessions() {
             set={(value) =>
               setForm({
                 ...form,
+
                 minimum_dwell_seconds:
                   value,
               })
             }
           />
 
-          <button className="primary">
+          <button
+            className="primary"
+            disabled={
+              locating ||
+              !form.latitude ||
+              !form.longitude
+            }
+          >
+            <CalendarDays size={18} />
             Create session
           </button>
         </form>
@@ -1098,6 +1282,7 @@ function Sessions() {
 
                   <div>
                     <small>Confirmed</small>
+
                     <strong>
                       {confirmedTotal}
                     </strong>
@@ -1111,6 +1296,7 @@ function Sessions() {
 
                   <div>
                     <small>Pending review</small>
+
                     <strong>
                       {pendingTotal}
                     </strong>
@@ -1124,6 +1310,7 @@ function Sessions() {
 
                   <div>
                     <small>Absent</small>
+
                     <strong>
                       {absentTotal}
                     </strong>
@@ -1139,7 +1326,10 @@ function Sessions() {
                 }}
               >
                 Rejected attendance attempts:{" "}
-                <strong>{rejectedTotal}</strong>
+
+                <strong>
+                  {rejectedTotal}
+                </strong>
               </div>
 
               <div className="table-panel">
@@ -1149,12 +1339,15 @@ function Sessions() {
                     <thead>
                       <tr>
                         <th>Student</th>
+
                         <th>
                           Matric number
                         </th>
+
                         <th>
                           Check-in time
                         </th>
+
                         <th>Status</th>
                       </tr>
                     </thead>
@@ -1239,11 +1432,13 @@ function Sessions() {
               style={{
                 cursor: "pointer",
                 alignItems: "center",
+
                 borderColor:
                   selectedSession?.id ===
                   session.id
                     ? "#2c72c7"
                     : undefined,
+
                 boxShadow:
                   selectedSession?.id ===
                   session.id
@@ -1290,6 +1485,7 @@ function Sessions() {
                   {new Date(
                     session.starts_at
                   ).toLocaleString()}
+
                   {" – "}
 
                   {new Date(
@@ -1308,6 +1504,7 @@ function Sessions() {
 
                   {session.radius_metres}m
                   geofence ·{" "}
+
                   {
                     session.minimum_dwell_seconds
                   }
